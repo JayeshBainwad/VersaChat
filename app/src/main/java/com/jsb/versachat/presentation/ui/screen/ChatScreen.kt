@@ -18,6 +18,8 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.jsb.versachat.domain.model.Message
+import com.jsb.versachat.domain.model.MessageRole
 import com.jsb.versachat.presentation.ui.state.ChatUiEvent
 import com.jsb.versachat.presentation.viewmodel.ChatViewModel
 import kotlinx.coroutines.launch
@@ -25,6 +27,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
+    modifier: Modifier = Modifier,
     viewModel: ChatViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -72,7 +75,8 @@ fun ChatScreen(
                     title = {
                         Text(
                             text = uiState.currentSession?.title ?: "VersaChat",
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Medium,
+                            modifier = modifier
                         )
                     },
                     navigationIcon = {
@@ -86,7 +90,8 @@ fun ChatScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Menu,
-                                contentDescription = "Menu"
+                                contentDescription = "Menu",
+                                modifier = modifier
                             )
                         }
                     }
@@ -97,7 +102,7 @@ fun ChatScreen(
             if (!uiState.hasAnySessions) {
                 // Empty state
                 Box(
-                    modifier = Modifier
+                    modifier = modifier
                         .fillMaxSize()
                         .padding(padding),
                     contentAlignment = Alignment.Center
@@ -107,19 +112,22 @@ fun ChatScreen(
                             text = "No chat sessions available",
                             style = MaterialTheme.typography.headlineSmall
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = modifier.height(16.dp))
                         Button(
                             onClick = {
                                 viewModel.onEvent(ChatUiEvent.CreateNewSession("General Chat"))
                             }
                         ) {
-                            Text("Create New Chat")
+                            Text(
+                                text = "Create New Chat",
+                                modifier = modifier
+                                )
                         }
                     }
                 }
             } else {
                 Column(
-                    modifier = Modifier
+                    modifier = modifier
                         .fillMaxSize()
                         .padding(padding)
                         .padding(16.dp)
@@ -136,11 +144,13 @@ fun ChatScreen(
                     }
 
                     LazyColumn(
-                        modifier = Modifier.weight(1f),
+                        modifier = modifier.weight(1f),
                         state = listState,
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(messages, key = { it.timestamp }) { message ->
+                        items(items = messages,
+                            key = { it.timestamp }
+                        ) { message ->
                             MessageBubble(message = message)
                         }
 
@@ -148,23 +158,24 @@ fun ChatScreen(
                         if (uiState.isLoading) {
                             item {
                                 Box(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = modifier
+                                        .fillMaxWidth(),
                                     contentAlignment = Alignment.CenterStart
                                 ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier
+                                        modifier = modifier
                                             .background(
-                                                color = Color(0xFFE0E0E0),
+                                                color = MaterialTheme.colorScheme.surfaceVariant,
                                                 shape = RoundedCornerShape(8.dp)
                                             )
                                             .padding(12.dp)
                                     ) {
                                         CircularProgressIndicator(
-                                            modifier = Modifier.size(16.dp),
+                                            modifier = modifier.size(16.dp),
                                             strokeWidth = 2.dp
                                         )
-                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Spacer(modifier = modifier.width(8.dp))
                                         Text(
                                             text = "AI is typing...",
                                             style = MaterialTheme.typography.bodyMedium,
@@ -193,23 +204,25 @@ fun ChatScreen(
 }
 
 @Composable
-private fun MessageBubble(message: com.jsb.versachat.domain.model.Message) {
+private fun MessageBubble(message: Message) {
     Box(
         modifier = Modifier.fillMaxWidth(),
-        contentAlignment = if (message.role == com.jsb.versachat.domain.model.MessageRole.USER)
+        contentAlignment = if (message.role == MessageRole.USER)
             Alignment.CenterEnd else Alignment.CenterStart
     ) {
         Text(
             text = message.content,
             modifier = Modifier
                 .background(
-                    color = if (message.role == com.jsb.versachat.domain.model.MessageRole.USER)
-                        Color(0xFFDCF8C6) else Color(0xFFE0E0E0),
+                    color = if (message.role == MessageRole.USER)
+                        MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
                     shape = RoundedCornerShape(12.dp)
                 )
                 .padding(12.dp)
                 .widthIn(max = 280.dp),
-            style = MaterialTheme.typography.bodyMedium
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (message.role == MessageRole.USER)
+                MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
         )
     }
 }

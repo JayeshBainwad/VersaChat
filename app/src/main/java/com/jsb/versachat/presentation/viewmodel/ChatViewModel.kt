@@ -7,6 +7,7 @@ import com.jsb.versachat.domain.model.ChatSession
 import com.jsb.versachat.domain.model.Message
 import com.jsb.versachat.domain.model.MessageRole
 import com.jsb.versachat.domain.model.ResponseStyle
+import com.jsb.versachat.domain.repository.ChatRepository
 import com.jsb.versachat.domain.usecase.SendMessageUseCase
 import com.jsb.versachat.domain.util.Result
 import com.jsb.versachat.domain.util.safeCall
@@ -23,7 +24,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class ChatViewModel @Inject constructor(
-    private val sendMessageUseCase: SendMessageUseCase
+    private val sendMessageUseCase: SendMessageUseCase,
+    private val chatRepository: ChatRepository
 ) : ViewModel() {
 
     companion object {
@@ -35,7 +37,7 @@ class ChatViewModel @Inject constructor(
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
     init {
-        initializeDefaultSession()
+        initializeApp()
     }
 
     fun onEvent(event: ChatUiEvent) {
@@ -50,36 +52,49 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private fun initializeDefaultSession() {
-        Log.d(TAG, "Initializing default session")
+    private fun initializeApp() {
+        Log.d(TAG, "Initializing app and loading sessions")
 
-        // Using safeCall utility for synchronous operations
-        val result = safeCall(TAG) {
-            val defaultSession = ChatSession(
-                id = UUID.randomUUID().toString(),
-                title = DEFAULT_SESSION_TITLE,
-                responseStyle = ResponseStyle.DETAILED
-            )
+        viewModelScope.launch {
+            // Collect sessions from database
+            chatRepository.getAllSessions().collect { sessions ->
+                Log.d(TAG, "Loaded ${sessions.size} sessions from database")
 
-            _uiState.value = _uiState.value.copy(
-                sessions = listOf(defaultSession),
-                currentSessionId = defaultSession.id
-            )
+                if (sessions.isEmpty()) {
+                    // Create default session if none exist
+                    createDefaultSession()
+                } else {
+                    val currentSessionId = _uiState.value.currentSessionId
+                        ?: sessions.firstOrNull()?.id
 
-            Log.d(TAG, "Default session initialized successfully")
+                    _uiState.value = _uiState.value.copy(
+                        sessions = sessions,
+                        currentSessionId = currentSessionId
+                    )
+                }
+            }
         }
+    }
 
-        // Handle the result
-        when (result) {
+    private suspend fun createDefaultSession() {
+        Log.d(TAG, "Creating default session")
+
+        val defaultSession = ChatSession(
+            id = UUID.randomUUID().toString(),
+            title = DEFAULT_SESSION_TITLE,
+            responseStyle = ResponseStyle.DETAILED
+        )
+
+        when (val result = chatRepository.saveSession(defaultSession)) {
             is Result.Success -> {
-                // Success handled in the action block
+                Log.d(TAG, "Default session created successfully")
             }
             is Result.Error -> {
-                Log.e(TAG, "Failed to initialize default session", result.exception)
+                Log.e(TAG, "Failed to create default session", result.exception)
                 showError("Failed to initialize chat: ${result.exception.toUserFriendlyMessage()}")
             }
             is Result.Loading -> {
-                // Not applicable for this case
+                // Handle loading state if needed
             }
         }
     }
@@ -102,37 +117,35 @@ class ChatViewModel @Inject constructor(
             return
         }
 
-        // Using safeCall for preparing the message
-        val preparationResult = safeCall(TAG) {
+        viewModelScope.launch {
             val userMessage = Message(role = MessageRole.USER, content = content)
-            val updatedMessages = currentSession.messages + userMessage
-            val updatedSession = currentSession.copy(
-                messages = updatedMessages,
-                lastUpdated = System.currentTimeMillis()
-            )
 
-            updateSession(updatedSession)
-            _uiState.value = currentState.copy(isLoading = true, error = null)
+            // Save user message to database
+            when (val saveResult = chatRepository.saveMessage(currentSession.id, userMessage)) {
+                is Result.Success -> {
+                    _uiState.value = currentState.copy(isLoading = true, error = null)
 
-            Pair(updatedMessages, updatedSession)
-        }
-
-        when (preparationResult) {
-            is Result.Success -> {
-                val (updatedMessages, updatedSession) = preparationResult.data
-
-                // Get AI response
-                viewModelScope.launch {
+                    // Get AI response
+                    val updatedMessages = currentSession.messages + userMessage
                     when (val result = sendMessageUseCase(updatedMessages, currentSession.responseStyle)) {
                         is Result.Success -> {
                             Log.d(TAG, "Received AI response")
-                            val finalMessages = updatedMessages + result.data
-                            val finalSession = updatedSession.copy(
-                                messages = finalMessages,
-                                lastUpdated = System.currentTimeMillis()
-                            )
-                            updateSession(finalSession)
-                            _uiState.value = _uiState.value.copy(isLoading = false)
+
+                            // Save AI message to database
+                            when (chatRepository.saveMessage(currentSession.id, result.data)) {
+                                is Result.Success -> {
+                                    Log.d(TAG, "AI message saved successfully")
+                                    _uiState.value = _uiState.value.copy(isLoading = false)
+                                }
+                                is Result.Error -> {
+                                    Log.e(TAG, "Failed to save AI message")
+                                    showError("Failed to save AI response")
+                                    _uiState.value = _uiState.value.copy(isLoading = false)
+                                }
+                                is Result.Loading -> {
+                                    // Handle loading state
+                                }
+                            }
                         }
                         is Result.Error -> {
                             Log.e(TAG, "Error getting AI response", result.exception)
@@ -140,17 +153,17 @@ class ChatViewModel @Inject constructor(
                             _uiState.value = _uiState.value.copy(isLoading = false)
                         }
                         is Result.Loading -> {
-                            // Handle loading state if needed
+                            // Handle loading state
                         }
                     }
                 }
-            }
-            is Result.Error -> {
-                Log.e(TAG, "Error preparing message", preparationResult.exception)
-                showError("Failed to send message: ${preparationResult.exception.toUserFriendlyMessage()}")
-            }
-            is Result.Loading -> {
-                // Not applicable for this case
+                is Result.Error -> {
+                    Log.e(TAG, "Failed to save user message", saveResult.exception)
+                    showError("Failed to send message: ${saveResult.exception.toUserFriendlyMessage()}")
+                }
+                is Result.Loading -> {
+                    // Handle loading state
+                }
             }
         }
     }
@@ -163,41 +176,32 @@ class ChatViewModel @Inject constructor(
             return
         }
 
-        // Using safeCall utility
-        val result = safeCall(TAG) {
+        viewModelScope.launch {
             val newSession = ChatSession(
                 id = UUID.randomUUID().toString(),
                 title = title.trim(),
                 responseStyle = ResponseStyle.DETAILED
             )
 
-            val currentState = _uiState.value
-            val updatedSessions = currentState.sessions + newSession
-
-            _uiState.value = currentState.copy(
-                sessions = updatedSessions,
-                currentSessionId = newSession.id,
-                isDrawerOpen = false
-            )
-
-            Log.d(TAG, "New session created successfully: ${newSession.id}")
-        }
-
-        when (result) {
-            is Result.Success -> {
-                // Success handled in action block
-            }
-            is Result.Error -> {
-                Log.e(TAG, "Error creating new session", result.exception)
-                showError("Failed to create new session: ${result.exception.toUserFriendlyMessage()}")
-            }
-            is Result.Loading -> {
-                // Not applicable
+            when (val result = chatRepository.saveSession(newSession)) {
+                is Result.Success -> {
+                    Log.d(TAG, "New session created successfully: ${newSession.id}")
+                    _uiState.value = _uiState.value.copy(
+                        currentSessionId = newSession.id,
+                        isDrawerOpen = false
+                    )
+                }
+                is Result.Error -> {
+                    Log.e(TAG, "Error creating new session", result.exception)
+                    showError("Failed to create new session: ${result.exception.toUserFriendlyMessage()}")
+                }
+                is Result.Loading -> {
+                    // Handle loading state
+                }
             }
         }
     }
 
-    // Rest of the methods remain the same...
     private fun switchSession(sessionId: String) {
         Log.d(TAG, "Switching to session: $sessionId")
 
@@ -220,27 +224,24 @@ class ChatViewModel @Inject constructor(
     private fun updateResponseStyle(sessionId: String, responseStyle: ResponseStyle) {
         Log.d(TAG, "Updating response style for session $sessionId to ${responseStyle.displayName}")
 
-        val result = safeCall(TAG) {
-            val currentState = _uiState.value
-            val updatedSessions = currentState.sessions.map { session ->
-                if (session.id == sessionId) {
-                    session.copy(responseStyle = responseStyle)
-                } else {
-                    session
+        viewModelScope.launch {
+            val session = chatRepository.getSessionById(sessionId)
+            if (session != null) {
+                val updatedSession = session.copy(responseStyle = responseStyle)
+                when (val result = chatRepository.updateSession(updatedSession)) {
+                    is Result.Success -> {
+                        Log.d(TAG, "Response style updated successfully")
+                    }
+                    is Result.Error -> {
+                        Log.e(TAG, "Error updating response style", result.exception)
+                        showError("Failed to update response style: ${result.exception.toUserFriendlyMessage()}")
+                    }
+                    is Result.Loading -> {
+                        // Handle loading state
+                    }
                 }
-            }
-
-            _uiState.value = currentState.copy(sessions = updatedSessions)
-            Log.d(TAG, "Response style updated successfully")
-        }
-
-        when (result) {
-            is Result.Error -> {
-                Log.e(TAG, "Error updating response style", result.exception)
-                showError("Failed to update response style: ${result.exception.toUserFriendlyMessage()}")
-            }
-            else -> {
-                // Success or other states
+            } else {
+                showError("Session not found")
             }
         }
     }
@@ -254,29 +255,26 @@ class ChatViewModel @Inject constructor(
             return
         }
 
-        val result = safeCall(TAG) {
-            val updatedSessions = currentState.sessions.filter { it.id != sessionId }
-            val newCurrentId = if (currentState.currentSessionId == sessionId) {
-                updatedSessions.firstOrNull()?.id
-            } else {
-                currentState.currentSessionId
-            }
+        viewModelScope.launch {
+            when (val result = chatRepository.deleteSession(sessionId)) {
+                is Result.Success -> {
+                    Log.d(TAG, "Session deleted successfully")
 
-            _uiState.value = currentState.copy(
-                sessions = updatedSessions,
-                currentSessionId = newCurrentId
-            )
-
-            Log.d(TAG, "Session deleted successfully")
-        }
-
-        when (result) {
-            is Result.Error -> {
-                Log.e(TAG, "Error deleting session", result.exception)
-                showError("Failed to delete session: ${result.exception.toUserFriendlyMessage()}")
-            }
-            else -> {
-                // Success
+                    // If we deleted the current session, switch to another one
+                    if (currentState.currentSessionId == sessionId) {
+                        val remainingSessions = currentState.sessions.filter { it.id != sessionId }
+                        _uiState.value = currentState.copy(
+                            currentSessionId = remainingSessions.firstOrNull()?.id
+                        )
+                    }
+                }
+                is Result.Error -> {
+                    Log.e(TAG, "Error deleting session", result.exception)
+                    showError("Failed to delete session: ${result.exception.toUserFriendlyMessage()}")
+                }
+                is Result.Loading -> {
+                    // Handle loading state
+                }
             }
         }
     }
@@ -287,14 +285,6 @@ class ChatViewModel @Inject constructor(
 
     private fun toggleDrawer() {
         _uiState.value = _uiState.value.copy(isDrawerOpen = !_uiState.value.isDrawerOpen)
-    }
-
-    private fun updateSession(updatedSession: ChatSession) {
-        val currentState = _uiState.value
-        val updatedSessions = currentState.sessions.map { session ->
-            if (session.id == updatedSession.id) updatedSession else session
-        }
-        _uiState.value = currentState.copy(sessions = updatedSessions)
     }
 
     private fun showError(message: String) {

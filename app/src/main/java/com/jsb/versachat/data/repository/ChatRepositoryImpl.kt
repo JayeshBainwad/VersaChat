@@ -2,21 +2,28 @@ package com.jsb.versachat.data.repository
 
 import android.util.Log
 import com.jsb.versachat.data.api.GroqApi
+import com.jsb.versachat.data.local.LocalDataSource
+import com.jsb.versachat.data.local.mapper.toDomainModel
+import com.jsb.versachat.data.local.mapper.toEntity
 import com.jsb.versachat.data.model.ChatRequest
 import com.jsb.versachat.data.model.toApiMessage
+import com.jsb.versachat.domain.model.ChatSession
 import com.jsb.versachat.domain.model.Message
 import com.jsb.versachat.domain.model.ResponseStyle
 import com.jsb.versachat.domain.repository.ChatRepository
 import com.jsb.versachat.domain.util.Result
 import com.jsb.versachat.domain.util.safeSuspendCall
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class ChatRepositoryImpl @Inject constructor(
-    private val api: GroqApi
+    private val api: GroqApi,
+    private val localDataSource: LocalDataSource
 ) : ChatRepository {
 
     companion object {
@@ -28,8 +35,6 @@ class ChatRepositoryImpl @Inject constructor(
         messages: List<Message>,
         responseStyle: ResponseStyle
     ): Result<String> = withContext(Dispatchers.IO) {
-
-        // Using safeSuspendCall utility
         safeSuspendCall(TAG) {
             Log.d(TAG, "Sending chat request with ${messages.size} messages, style: ${responseStyle.displayName}")
 
@@ -59,15 +64,6 @@ class ChatRepositoryImpl @Inject constructor(
                         throw Exception("No content received from AI")
                     }
 
-                    // Check remaining tokens
-                    val remainingTokens = response.headers()["x-ratelimit-remaining-tokens"]?.toIntOrNull()
-                    remainingTokens?.let { tokens ->
-                        Log.d(TAG, "Remaining tokens: $tokens")
-                        if (tokens < LOW_TOKEN_THRESHOLD) {
-                            Log.w(TAG, "Low tokens warning: $tokens")
-                        }
-                    }
-
                     Log.d(TAG, "Successfully received response")
                     content
                 }
@@ -84,6 +80,59 @@ class ChatRepositoryImpl @Inject constructor(
                     throw Exception(errorMessage)
                 }
             }
+        }
+    }
+
+    override fun getAllSessions(): Flow<List<ChatSession>> {
+        return localDataSource.getAllSessions().map { sessionEntities ->
+            sessionEntities.map { sessionEntity ->
+                val messages = localDataSource.getMessagesBySessionSync(sessionEntity.id)
+                    .map { it.toDomainModel() }
+                sessionEntity.toDomainModel(messages)
+            }
+        }
+    }
+
+    override suspend fun getSessionById(sessionId: String): ChatSession? = withContext(Dispatchers.IO) {
+        val sessionEntity = localDataSource.getSessionById(sessionId) ?: return@withContext null
+        val messages = localDataSource.getMessagesBySessionSync(sessionId)
+            .map { it.toDomainModel() }
+        sessionEntity.toDomainModel(messages)
+    }
+
+    override suspend fun saveSession(session: ChatSession): Result<Unit> = withContext(Dispatchers.IO) {
+        safeSuspendCall(TAG) {
+            localDataSource.insertSession(session.toEntity())
+            // Save messages if any
+            if (session.messages.isNotEmpty()) {
+                val messageEntities = session.messages.map { it.toEntity(session.id) }
+                localDataSource.insertMessages(messageEntities)
+            }
+        }
+    }
+
+    override suspend fun updateSession(session: ChatSession): Result<Unit> = withContext(Dispatchers.IO) {
+        safeSuspendCall(TAG) {
+            localDataSource.updateSession(session.toEntity())
+        }
+    }
+
+    override suspend fun deleteSession(sessionId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        safeSuspendCall(TAG) {
+            localDataSource.deleteSession(sessionId)
+        }
+    }
+
+    override suspend fun saveMessage(sessionId: String, message: Message): Result<Unit> = withContext(Dispatchers.IO) {
+        safeSuspendCall(TAG) {
+            localDataSource.insertMessage(message.toEntity(sessionId))
+
+            // Update session's lastUpdated timestamp
+            val session = localDataSource.getSessionById(sessionId)
+            session?.let {
+                localDataSource.updateSession(it.copy(lastUpdated = System.currentTimeMillis()))
+            }
+            Unit
         }
     }
 }

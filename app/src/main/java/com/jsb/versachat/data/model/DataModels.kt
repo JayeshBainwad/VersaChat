@@ -4,7 +4,8 @@ import com.jsb.versachat.domain.model.Message as DomainMessage
 import com.jsb.versachat.domain.model.MessageRole
 
 data class ChatRequest(
-    val model: String = "meta-llama/llama-4-scout-17b-16e-instruct",
+    val model: String = "openai/gpt-oss-120b",
+//    val model: String = "meta-llama/llama-4-scout-17b-16e-instruct",
     val messages: List<ApiMessage>,
     val max_tokens: Int = 512,
     val temperature: Double = 0.7
@@ -36,7 +37,7 @@ fun DomainMessage.toApiMessage() = ApiMessage(
     content = this.content
 )
 
-fun ApiMessage.toDomainMessage() = DomainMessage(
+fun ApiMessage.toDomainMessage() = DomainMessage( //Function "toDomainMessage" is never used
     role = MessageRole.entries.find { it.value == this.role } ?: MessageRole.ASSISTANT,
     content = this.content
 )
