@@ -4,6 +4,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.hilt)
 }
 
 val localProperties = Properties().apply {
@@ -77,10 +79,17 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+    //  Dagger Hilt
+    ksp(libs.hilt.android.compiler)
+    implementation(libs.hilt.android)
+    // Hilt Navigation Compose
+    implementation(libs.hilt.navigation.compose)
 
     // Retrofit for API
     implementation("com.squareup.retrofit2:retrofit:3.0.0")
     implementation("com.squareup.retrofit2:converter-gson:3.0.0")
+    implementation("com.squareup.okhttp3:okhttp:5.1.0") // core OkHttp
+    implementation("com.squareup.okhttp3:logging-interceptor:5.1.0") // <- this one
 
     // Coroutines for async
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
