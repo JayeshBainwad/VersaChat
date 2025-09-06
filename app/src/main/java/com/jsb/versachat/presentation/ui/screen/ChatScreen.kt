@@ -22,7 +22,10 @@ import com.jsb.versachat.domain.model.Message
 import com.jsb.versachat.domain.model.MessageRole
 import com.jsb.versachat.presentation.ui.state.ChatUiEvent
 import com.jsb.versachat.presentation.viewmodel.ChatViewModel
+import dev.jeziellago.compose.markdowntext.MarkdownText
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,10 +59,26 @@ fun ChatScreen(
         }
     }
 
+    // Show loading indicator while initial data is being loaded
+    if (uiState.isLoading && uiState.sessions.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet {
+            ModalDrawerSheet(
+                modifier = Modifier
+                    .fillMaxWidth(0.75f)
+            ) {
                 ChatListScreen(
                     sessions = uiState.sessions,
                     currentSessionId = uiState.currentSessionId,
@@ -75,8 +94,7 @@ fun ChatScreen(
                     title = {
                         Text(
                             text = uiState.currentSession?.title ?: "VersaChat",
-                            fontWeight = FontWeight.Medium,
-                            modifier = modifier
+                            fontWeight = FontWeight.Medium
                         )
                     },
                     navigationIcon = {
@@ -90,8 +108,7 @@ fun ChatScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Menu,
-                                contentDescription = "Menu",
-                                modifier = modifier
+                                contentDescription = "Menu"
                             )
                         }
                     }
@@ -100,34 +117,41 @@ fun ChatScreen(
             snackbarHost = { SnackbarHost(snackbarHostState) }
         ) { padding ->
             if (!uiState.hasAnySessions) {
-                // Empty state
+                // Empty state - only show when we're sure there are no sessions
+
                 Box(
-                    modifier = modifier
+                    modifier = Modifier
                         .fillMaxSize()
-                        .padding(padding),
+                        .background(MaterialTheme.colorScheme.background),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "No chat sessions available",
-                            style = MaterialTheme.typography.headlineSmall
-                        )
-                        Spacer(modifier = modifier.height(16.dp))
-                        Button(
-                            onClick = {
-                                viewModel.onEvent(ChatUiEvent.CreateNewSession("General Chat"))
-                            }
-                        ) {
-                            Text(
-                                text = "Create New Chat",
-                                modifier = modifier
-                                )
-                        }
-                    }
+                    CircularProgressIndicator()
                 }
+
+//                Box(
+//                    modifier = Modifier
+//                        .fillMaxSize()
+//                        .padding(padding),
+//                    contentAlignment = Alignment.Center
+//                ) {
+//                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+//                        Text(
+//                            text = "No chat sessions available",
+//                            style = MaterialTheme.typography.headlineSmall
+//                        )
+//                        Spacer(modifier = Modifier.height(16.dp))
+//                        Button(
+//                            onClick = {
+//                                viewModel.onEvent(ChatUiEvent.CreateNewSession("General Chat"))
+//                            }
+//                        ) {
+//                            Text("Create New Chat")
+//                        }
+//                    }
+//                }
             } else {
                 Column(
-                    modifier = modifier
+                    modifier = Modifier
                         .fillMaxSize()
                         .padding(padding)
                         .padding(16.dp)
@@ -144,27 +168,24 @@ fun ChatScreen(
                     }
 
                     LazyColumn(
-                        modifier = modifier.weight(1f),
+                        modifier = Modifier.weight(1f),
                         state = listState,
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(items = messages,
-                            key = { it.timestamp }
-                        ) { message ->
+                        items(items = messages, key = { it.timestamp }) { message ->
                             MessageBubble(message = message)
                         }
 
-                        // Loading indicator
+                        // Loading indicator for AI response
                         if (uiState.isLoading) {
                             item {
                                 Box(
-                                    modifier = modifier
-                                        .fillMaxWidth(),
+                                    modifier = Modifier.fillMaxWidth(),
                                     contentAlignment = Alignment.CenterStart
                                 ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        modifier = modifier
+                                        modifier = Modifier
                                             .background(
                                                 color = MaterialTheme.colorScheme.surfaceVariant,
                                                 shape = RoundedCornerShape(8.dp)
@@ -172,10 +193,10 @@ fun ChatScreen(
                                             .padding(12.dp)
                                     ) {
                                         CircularProgressIndicator(
-                                            modifier = modifier.size(16.dp),
+                                            modifier = Modifier.size(16.dp),
                                             strokeWidth = 2.dp
                                         )
-                                        Spacer(modifier = modifier.width(8.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
                                         Text(
                                             text = "AI is typing...",
                                             style = MaterialTheme.typography.bodyMedium,
@@ -210,8 +231,7 @@ private fun MessageBubble(message: Message) {
         contentAlignment = if (message.role == MessageRole.USER)
             Alignment.CenterEnd else Alignment.CenterStart
     ) {
-        Text(
-            text = message.content,
+        Box(
             modifier = Modifier
                 .background(
                     color = if (message.role == MessageRole.USER)
@@ -219,11 +239,33 @@ private fun MessageBubble(message: Message) {
                     shape = RoundedCornerShape(12.dp)
                 )
                 .padding(12.dp)
-                .widthIn(max = 280.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (message.role == MessageRole.USER)
-                MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSecondaryContainer
-        )
+                .widthIn(max = 280.dp)
+        ) {
+            if (message.role == MessageRole.USER) {
+                // User messages - plain text
+                MarkdownText(
+                    markdown = message.content,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    ),
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+//                Text(
+//                    text = message.content,
+//                    style = MaterialTheme.typography.bodyMedium,
+//                    color = MaterialTheme.colorScheme.onPrimaryContainer
+//                )
+            } else {
+                // AI messages - render markdown
+                MarkdownText(
+                    markdown = message.content,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    ),
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
+        }
     }
 }
 

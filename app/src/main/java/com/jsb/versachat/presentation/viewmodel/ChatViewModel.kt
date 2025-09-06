@@ -47,6 +47,7 @@ class ChatViewModel @Inject constructor(
             is ChatUiEvent.SwitchSession -> switchSession(event.sessionId)
             is ChatUiEvent.UpdateResponseStyle -> updateResponseStyle(event.sessionId, event.responseStyle)
             is ChatUiEvent.DeleteSession -> deleteSession(event.sessionId)
+            is ChatUiEvent.UpdateSessionTitle -> updateSessionTitle(event.sessionId, event.title)
             is ChatUiEvent.ClearError -> clearError()
             is ChatUiEvent.ToggleDrawer -> toggleDrawer()
         }
@@ -235,6 +236,39 @@ class ChatViewModel @Inject constructor(
                     is Result.Error -> {
                         Log.e(TAG, "Error updating response style", result.exception)
                         showError("Failed to update response style: ${result.exception.toUserFriendlyMessage()}")
+                    }
+                    is Result.Loading -> {
+                        // Handle loading state
+                    }
+                }
+            } else {
+                showError("Session not found")
+            }
+        }
+    }
+
+    private fun updateSessionTitle(sessionId: String, title: String) {
+        Log.d(TAG, "Updating session title for $sessionId to: $title")
+
+        if (title.isBlank()) {
+            showError("Session title cannot be empty")
+            return
+        }
+
+        viewModelScope.launch {
+            val session = chatRepository.getSessionById(sessionId)
+            if (session != null) {
+                val updatedSession = session.copy(
+                    title = title.trim(),
+                    lastUpdated = System.currentTimeMillis()
+                )
+                when (val result = chatRepository.updateSession(updatedSession)) {
+                    is Result.Success -> {
+                        Log.d(TAG, "Session title updated successfully")
+                    }
+                    is Result.Error -> {
+                        Log.e(TAG, "Error updating session title", result.exception)
+                        showError("Failed to update session title: ${result.exception.toUserFriendlyMessage()}")
                     }
                     is Result.Loading -> {
                         // Handle loading state

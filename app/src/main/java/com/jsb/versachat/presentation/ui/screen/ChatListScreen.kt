@@ -7,6 +7,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -60,6 +63,9 @@ fun ChatListScreen(
                     onDeleteClick = { onEvent(ChatUiEvent.DeleteSession(session.id)) },
                     onStyleChange = { style ->
                         onEvent(ChatUiEvent.UpdateResponseStyle(session.id, style))
+                    },
+                    onTitleUpdate = { newTitle ->
+                        onEvent(ChatUiEvent.UpdateSessionTitle(session.id, newTitle))
                     }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -115,14 +121,26 @@ private fun SessionItem(
     isSelected: Boolean,
     onSessionClick: () -> Unit,
     onDeleteClick: () -> Unit,
-    onStyleChange: (ResponseStyle) -> Unit
+    onStyleChange: (ResponseStyle) -> Unit,
+    onTitleUpdate: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var isEditingTitle by remember { mutableStateOf(false) }
+    var editedTitle by remember { mutableStateOf(session.title) }
+
+    // Reset edited title when session changes
+    LaunchedEffect(session.title) {
+        editedTitle = session.title
+    }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onSessionClick() },
+            .clickable {
+                if (!isEditingTitle) {
+                    onSessionClick()
+                }
+            },
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected)
                 MaterialTheme.colorScheme.primaryContainer
@@ -137,64 +155,122 @@ private fun SessionItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = session.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                    modifier = Modifier.weight(1f)
-                )
-
-                IconButton(onClick = onDeleteClick) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Delete Session",
-                        tint = MaterialTheme.colorScheme.error
+                if (isEditingTitle) {
+                    // Edit mode
+                    OutlinedTextField(
+                        value = editedTitle,
+                        onValueChange = { editedTitle = it },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
                     )
+
+                    // Save button
+                    IconButton(
+                        onClick = {
+                            if (editedTitle.isNotBlank() && editedTitle != session.title) {
+                                onTitleUpdate(editedTitle.trim())
+                            }
+                            isEditingTitle = false
+                        }
+                    ) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = "Save Title",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    // Cancel button
+                    IconButton(
+                        onClick = {
+                            editedTitle = session.title
+                            isEditingTitle = false
+                        }
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Cancel Edit",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    // Display mode
+                    Text(
+                        text = session.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    // Edit button
+                    IconButton(
+                        onClick = { isEditingTitle = true }
+                    ) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Edit Title",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    // Delete button
+                    IconButton(onClick = onDeleteClick) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete Session",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            if (!isEditingTitle) {
+                Spacer(modifier = Modifier.height(8.dp))
 
-            // Response style selector
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Style: ${session.responseStyle.displayName}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                // Response style selector
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Style: ${session.responseStyle.displayName}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
 
-                Box {
-                    TextButton(onClick = { expanded = true }) {
-                        Text("Change")
-                    }
+                    Box {
+                        TextButton(onClick = { expanded = true }) {
+                            Text("Change")
+                        }
 
-                    DropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false }
-                    ) {
-                        ResponseStyle.values().forEach { style ->
-                            DropdownMenuItem(
-                                text = { Text(style.displayName) },
-                                onClick = {
-                                    onStyleChange(style)
-                                    expanded = false
-                                }
-                            )
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            ResponseStyle.values().forEach { style ->
+                                DropdownMenuItem(
+                                    text = { Text(style.displayName) },
+                                    onClick = {
+                                        onStyleChange(style)
+                                        expanded = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            // Message count
-            Text(
-                text = "${session.messages.size} messages",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                // Message count
+                Text(
+                    text = "${session.messages.size} messages",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
