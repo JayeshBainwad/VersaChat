@@ -51,6 +51,14 @@ Built with **Jetpack Compose**, **Material Design 3**, and the latest Android be
 
 ---
 
+## 🚀 Ongoing Improvements
+
+- **SLM Model Deployment**: Implementing Small Language Models (SLM) for offline support, enabling chat functionality without internet connectivity.
+- **Model Selection**: Adding support for selecting between multiple Groq models and toggling between offline (SLM) and online (API) modes for flexible user experience.
+- **Performance & UI/UX Enhancements**: Optimizing app performance and refining the user interface for a smoother, more intuitive experience.
+
+---
+
 ## 🏛 Architecture & File Structure
 
 ```
@@ -91,7 +99,7 @@ com.jsb.versachat/
 
 ## ⚠️ API Usage Notice
 
-This project uses the **Groq API** for AI text generation. Please:
+This project uses the **Groq API** with the **`openai/gpt-oss-120b`** model for AI text generation. Please:
 
 * Obtain your own API key from [x.ai/api](https://x.ai/api)
 * Follow Groq’s terms of service
