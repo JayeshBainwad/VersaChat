@@ -91,7 +91,7 @@ com.jsb.versachat/
 
 ## ⚠️ API Usage Notice
 
-This project uses the **Groq API** for AI text generation. Please:
+This project uses the **Groq API** with the **`openai/gpt-oss-120b`** model for AI text generation. Please:
 
 * Obtain your own API key from [x.ai/api](https://x.ai/api)
 * Follow Groq’s terms of service
