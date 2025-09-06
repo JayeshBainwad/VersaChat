@@ -1,6 +1,10 @@
+Here’s a polished **GitHub-ready README** version of what you shared — I’ve kept formatting clean, ensured proper markdown usage, and fixed links so they don’t look broken.
+
+```markdown
 # VersaChat - AI Chat Application
 
-A modern Android chat application powered by the **Groq API** for intelligent conversations. Built with **Jetpack Compose**, **Material Design 3**, and the latest Android best practices.
+A modern Android chat application powered by the **Groq API** for intelligent conversations.  
+Built with **Jetpack Compose**, **Material Design 3**, and the latest Android best practices.
 
 ---
 
@@ -53,6 +57,7 @@ A modern Android chat application powered by the **Groq API** for intelligent co
 ## 🏛 Architecture & File Structure
 
 ```
+
 com.jsb.versachat/
 ├── data/           # Data layer
 │   ├── api/        # Groq API integration
@@ -64,10 +69,10 @@ com.jsb.versachat/
 │   ├── repository/ # Repository interfaces
 │   └── usecase/    # Business use cases
 └── presentation/   # UI layer
-    ├── ui/         # Compose screens
-    └── viewmodel/  # ViewModels
+├── ui/         # Compose screens
+└── viewmodel/  # ViewModels
 
-```
+````
 
 ---
 
@@ -75,17 +80,15 @@ com.jsb.versachat/
 
 1. Clone the repository:
 
-    ```bash
-    git clone https://github.com/<your-username>/VersaChat.git
-
-    ```
+   ```bash
+   git clone https://github.com/<your-username>/VersaChat.git
+````
 
 2. Add your **Groq API key** in `local.properties`:
 
-    ```
-    GROQ_API_KEY=your_api_key_here
-
-    ```
+   ```
+   GROQ_API_KEY=your_api_key_here
+   ```
 
 3. Build and run using **Android Studio Narwhal (or later)**.
 
@@ -95,16 +98,16 @@ com.jsb.versachat/
 
 This project uses the **Groq API** for AI text generation. Please:
 
-- Obtain your own API key from Groq
-- Follow Groq’s terms of service
-- Be aware of **rate limits & pricing**
-- Store API keys securely
+* Obtain your own API key from Groq
+* Follow Groq’s terms of service
+* Be aware of **rate limits & pricing**
+* Store API keys securely
 
 ---
 
 ## 📄 License
 
-This project is licensed under the **MIT License** – see the [LICENSE](https://chatgpt.com/c/LICENSE) file for details.
+This project is licensed under the **MIT License** – see the [LICENSE](./LICENSE) file for details.
 
 ---
 
@@ -112,13 +115,14 @@ This project is licensed under the **MIT License** – see the [LICENSE](https:/
 
 Looking to collaborate or hire?
 
-| Type | Link |
-| --- | --- |
-| LinkedIn | [LinkedIn Profile](https://www.notion.so/www.linkedin.com/in/jayesh-bainwad-a09b93250) |
-| Email | [Email](https://www.notion.so/jbainwad@gmail.com) |
+| Type     | Link                                                                                             |
+| -------- | ------------------------------------------------------------------------------------------------ |
+| LinkedIn | [linkedin.com/in/jayesh-bainwad-a09b93250](https://www.linkedin.com/in/jayesh-bainwad-a09b93250) |
+| Email    | [jbainwad@gmail.com](mailto:jbainwad@gmail.com)                                                  |
 
 ---
 
 <div align="center">
 <strong>⭐ Star this repo if you found it helpful!</strong>
 </div>
+```
