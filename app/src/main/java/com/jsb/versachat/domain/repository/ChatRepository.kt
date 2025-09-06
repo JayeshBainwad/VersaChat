@@ -17,4 +17,5 @@ interface ChatRepository {
     suspend fun updateSession(session: ChatSession): Result<Unit>
     suspend fun deleteSession(sessionId: String): Result<Unit>
     suspend fun saveMessage(sessionId: String, message: Message): Result<Unit>
+    suspend fun deleteLastAIMessage(sessionId: String): Result<Unit>
 }

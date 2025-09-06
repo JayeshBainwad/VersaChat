@@ -20,10 +20,14 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.jsb.versachat.domain.model.Message
 import com.jsb.versachat.domain.model.MessageRole
+import com.jsb.versachat.domain.model.ResponseStyle
 import com.jsb.versachat.presentation.ui.state.ChatUiEvent
 import com.jsb.versachat.presentation.viewmodel.ChatViewModel
 import dev.jeziellago.compose.markdowntext.MarkdownText
 import kotlinx.coroutines.delay
+import com.jsb.versachat.presentation.ui.components.MessageBubble
+import com.jsb.versachat.presentation.ui.components.MessageWithActions
+import com.jsb.versachat.presentation.ui.components.ResponseStyleSelector
 import kotlinx.coroutines.launch
 
 
@@ -117,8 +121,6 @@ fun ChatScreen(
             snackbarHost = { SnackbarHost(snackbarHostState) }
         ) { padding ->
             if (!uiState.hasAnySessions) {
-                // Empty state - only show when we're sure there are no sessions
-
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -127,28 +129,6 @@ fun ChatScreen(
                 ) {
                     CircularProgressIndicator()
                 }
-
-//                Box(
-//                    modifier = Modifier
-//                        .fillMaxSize()
-//                        .padding(padding),
-//                    contentAlignment = Alignment.Center
-//                ) {
-//                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-//                        Text(
-//                            text = "No chat sessions available",
-//                            style = MaterialTheme.typography.headlineSmall
-//                        )
-//                        Spacer(modifier = Modifier.height(16.dp))
-//                        Button(
-//                            onClick = {
-//                                viewModel.onEvent(ChatUiEvent.CreateNewSession("General Chat"))
-//                            }
-//                        ) {
-//                            Text("Create New Chat")
-//                        }
-//                    }
-//                }
             } else {
                 Column(
                     modifier = Modifier
@@ -156,6 +136,19 @@ fun ChatScreen(
                         .padding(padding)
                         .padding(16.dp)
                 ) {
+                    // Response Style Selector
+                    uiState.currentSession?.let { session ->
+                        ResponseStyleSelector(
+                            currentStyle = session.responseStyle,
+                            onStyleChanged = { newStyle ->
+                                viewModel.onEvent(
+                                    ChatUiEvent.UpdateResponseStyle(session.id, newStyle)
+                                )
+                            },
+                            modifier = Modifier.padding(bottom = 16.dp)
+                        )
+                    }
+
                     // Messages list
                     val listState = rememberLazyListState()
                     val messages = uiState.currentSession?.messages ?: emptyList()
@@ -173,7 +166,16 @@ fun ChatScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(items = messages, key = { it.timestamp }) { message ->
-                            MessageBubble(message = message)
+                            MessageWithActions(
+                                message = message,
+                                currentResponseStyle = uiState.currentSession?.responseStyle
+                                    ?: ResponseStyle.DETAILED,
+                                onRegenerateResponse = { newStyle ->
+                                    viewModel.onEvent(
+                                        ChatUiEvent.RegenerateLastResponse(newStyle)
+                                    )
+                                }
+                            )
                         }
 
                         // Loading indicator for AI response
@@ -224,50 +226,6 @@ fun ChatScreen(
     }
 }
 
-@Composable
-private fun MessageBubble(message: Message) {
-    Box(
-        modifier = Modifier.fillMaxWidth(),
-        contentAlignment = if (message.role == MessageRole.USER)
-            Alignment.CenterEnd else Alignment.CenterStart
-    ) {
-        Box(
-            modifier = Modifier
-                .background(
-                    color = if (message.role == MessageRole.USER)
-                        MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
-                    shape = RoundedCornerShape(12.dp)
-                )
-                .padding(12.dp)
-                .widthIn(max = 280.dp)
-        ) {
-            if (message.role == MessageRole.USER) {
-                // User messages - plain text
-                MarkdownText(
-                    markdown = message.content,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    ),
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-//                Text(
-//                    text = message.content,
-//                    style = MaterialTheme.typography.bodyMedium,
-//                    color = MaterialTheme.colorScheme.onPrimaryContainer
-//                )
-            } else {
-                // AI messages - render markdown
-                MarkdownText(
-                    markdown = message.content,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    ),
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-            }
-        }
-    }
-}
 
 @Composable
 private fun MessageInput(

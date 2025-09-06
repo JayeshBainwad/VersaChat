@@ -37,4 +37,8 @@ class LocalDataSource @Inject constructor(
     suspend fun insertMessages(messages: List<MessageEntity>) = messageDao.insertMessages(messages)
 
     suspend fun getMessageCount(sessionId: String): Int = messageDao.getMessageCountBySession(sessionId)
+    suspend fun deleteLastAIMessage(sessionId: String) {
+        messageDao.deleteLastAIMessage(sessionId)
+    }
+
 }

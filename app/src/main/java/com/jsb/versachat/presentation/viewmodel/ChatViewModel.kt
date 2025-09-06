@@ -40,12 +40,14 @@ class ChatViewModel @Inject constructor(
         initializeApp()
     }
 
+    // Update your onEvent method to handle the new event:
     fun onEvent(event: ChatUiEvent) {
         when (event) {
             is ChatUiEvent.SendMessage -> sendMessage(event.content)
             is ChatUiEvent.CreateNewSession -> createNewSession(event.title)
             is ChatUiEvent.SwitchSession -> switchSession(event.sessionId)
             is ChatUiEvent.UpdateResponseStyle -> updateResponseStyle(event.sessionId, event.responseStyle)
+            is ChatUiEvent.RegenerateLastResponse -> regenerateLastResponse(event.responseStyle)
             is ChatUiEvent.DeleteSession -> deleteSession(event.sessionId)
             is ChatUiEvent.UpdateSessionTitle -> updateSessionTitle(event.sessionId, event.title)
             is ChatUiEvent.ClearError -> clearError()
@@ -96,6 +98,96 @@ class ChatViewModel @Inject constructor(
             }
             is Result.Loading -> {
                 // Handle loading state if needed
+            }
+        }
+    }
+
+    // Add this to your ChatViewModel class:
+    private fun regenerateLastResponse(responseStyle: ResponseStyle) {
+        Log.d(TAG, "Regenerating last response with style: ${responseStyle.displayName}")
+
+        val currentState = _uiState.value
+        val currentSession = currentState.currentSession
+
+        if (currentSession == null) {
+            Log.e(TAG, "No current session found")
+            showError("No active chat session")
+            return
+        }
+
+        // Find the last AI message
+        val lastAiMessage = currentSession.messages.lastOrNull { it.role == MessageRole.ASSISTANT }
+        if (lastAiMessage == null) {
+            showError("No AI response to regenerate")
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.value = currentState.copy(isLoading = true, error = null)
+
+            try {
+                // Delete the last AI message from database
+                when (val deleteResult = chatRepository.deleteLastAIMessage(currentSession.id)) {
+                    is Result.Success -> {
+                        Log.d(TAG, "Successfully deleted last AI message")
+
+                        // Get the conversation history without the deleted AI message
+                        val messagesWithoutLastAI = currentSession.messages.filter { it != lastAiMessage }
+
+                        // Generate new AI response with the new style
+                        when (val result = sendMessageUseCase(messagesWithoutLastAI, responseStyle)) {
+                            is Result.Success -> {
+                                Log.d(TAG, "Successfully generated new response")
+
+                                // Save the new AI message
+                                when (val saveResult = chatRepository.saveMessage(currentSession.id, result.data)) {
+                                    is Result.Success -> {
+                                        // Update session's response style preference
+                                        val updatedSession = currentSession.copy(responseStyle = responseStyle)
+                                        chatRepository.updateSession(updatedSession)
+
+                                        Log.d(TAG, "AI message regenerated and saved successfully")
+                                        _uiState.value = _uiState.value.copy(isLoading = false)
+                                    }
+                                    is Result.Error -> {
+                                        Log.e(TAG, "Failed to save regenerated AI message", saveResult.exception)
+                                        showError("Failed to save regenerated response: ${saveResult.exception.toUserFriendlyMessage()}")
+
+                                        // Re-save the original message as fallback
+                                        chatRepository.saveMessage(currentSession.id, lastAiMessage)
+                                        _uiState.value = _uiState.value.copy(isLoading = false)
+                                    }
+                                    is Result.Loading -> {
+                                        // Handle loading state
+                                    }
+                                }
+                            }
+                            is Result.Error -> {
+                                Log.e(TAG, "Error regenerating AI response", result.exception)
+                                showError("Failed to regenerate response: ${result.exception.toUserFriendlyMessage()}")
+
+                                // Re-save the original message as fallback
+                                chatRepository.saveMessage(currentSession.id, lastAiMessage)
+                                _uiState.value = _uiState.value.copy(isLoading = false)
+                            }
+                            is Result.Loading -> {
+                                // Handle loading state
+                            }
+                        }
+                    }
+                    is Result.Error -> {
+                        Log.e(TAG, "Failed to delete last AI message", deleteResult.exception)
+                        showError("Failed to prepare for regeneration: ${deleteResult.exception.toUserFriendlyMessage()}")
+                        _uiState.value = _uiState.value.copy(isLoading = false)
+                    }
+                    is Result.Loading -> {
+                        // Handle loading state
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Unexpected error during regeneration", e)
+                showError("Unexpected error: ${e.toUserFriendlyMessage()}")
+                _uiState.value = _uiState.value.copy(isLoading = false)
             }
         }
     }

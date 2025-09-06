@@ -6,7 +6,7 @@ import com.jsb.versachat.data.local.LocalDataSource
 import com.jsb.versachat.data.local.mapper.toDomainModel
 import com.jsb.versachat.data.local.mapper.toEntity
 import com.jsb.versachat.data.model.ChatRequest
-import com.jsb.versachat.data.model.toApiMessage
+import com.jsb.versachat.data.model.buildMessagesWithSystemPrompt
 import com.jsb.versachat.domain.model.ChatSession
 import com.jsb.versachat.domain.model.Message
 import com.jsb.versachat.domain.model.ResponseStyle
@@ -28,7 +28,6 @@ class ChatRepositoryImpl @Inject constructor(
 
     companion object {
         private const val TAG = "ChatRepositoryImpl"
-        private const val LOW_TOKEN_THRESHOLD = 1000
     }
 
     override suspend fun getChatResponse(
@@ -42,11 +41,23 @@ class ChatRepositoryImpl @Inject constructor(
                 throw IllegalArgumentException("Messages list cannot be empty")
             }
 
+            // Build messages with system prompt for the response style
+            val messagesWithSystem = buildMessagesWithSystemPrompt(messages, responseStyle)
+
             val request = ChatRequest(
-                messages = messages.map { it.toApiMessage() },
+                messages = messagesWithSystem,
                 max_tokens = responseStyle.maxTokens,
-                temperature = responseStyle.temperature
+                temperature = responseStyle.temperature,
+                // Add stop sequences for better control over response completion
+                stop = when (responseStyle) {
+                    ResponseStyle.SHORT -> listOf("\n\n", "---", "###")
+                    ResponseStyle.DETAILED -> listOf("---", "###")
+                    ResponseStyle.EXPLANATORY -> listOf("---", "###")
+                }
             )
+
+            Log.d(TAG, "Request: max_tokens=${request.max_tokens}, temperature=${request.temperature}")
+            Log.d(TAG, "System prompt: ${responseStyle.systemPrompt.take(100)}...")
 
             val response = api.createChatCompletion(request)
 
@@ -59,13 +70,23 @@ class ChatRepositoryImpl @Inject constructor(
                         throw Exception(body.error.message)
                     }
 
-                    val content = body.choices.firstOrNull()?.message?.content
+                    val choice = body.choices.firstOrNull()
+                        ?: throw Exception("No choices in response")
+
+                    val content = choice.message.content
                     if (content.isNullOrBlank()) {
                         throw Exception("No content received from AI")
                     }
 
-                    Log.d(TAG, "Successfully received response")
-                    content
+                    // Log the finish reason for debugging
+                    Log.d(TAG, "Response received - finish_reason: ${choice.finish_reason}")
+                    Log.d(TAG, "Response length: ${content.length} characters")
+
+                    // Clean up the response if needed
+                    val cleanedContent = cleanupResponse(content, responseStyle)
+
+                    Log.d(TAG, "Successfully received and cleaned response")
+                    cleanedContent
                 }
                 else -> {
                     val errorMessage = when (response.code()) {
@@ -81,6 +102,50 @@ class ChatRepositoryImpl @Inject constructor(
                 }
             }
         }
+    }
+
+    /**
+     * Clean up the AI response to ensure it's properly formatted and complete
+     */
+    private fun cleanupResponse(content: String, responseStyle: ResponseStyle): String {
+        var cleaned = content.trim()
+
+        // Remove any trailing incomplete sentences if the response was cut off
+        if (!cleaned.endsWith(".") && !cleaned.endsWith("!") && !cleaned.endsWith("?") && !cleaned.endsWith(":")) {
+            val lastSentenceEnd = maxOf(
+                cleaned.lastIndexOf('.'),
+                cleaned.lastIndexOf('!'),
+                cleaned.lastIndexOf('?')
+            )
+
+            if (lastSentenceEnd > cleaned.length * 0.7) { // Only if we're cutting less than 30%
+                cleaned = cleaned.substring(0, lastSentenceEnd + 1)
+            }
+        }
+
+        // Ensure minimum response quality for each style
+        when (responseStyle) {
+            ResponseStyle.SHORT -> {
+                // For short responses, ensure we have at least one complete sentence
+                if (cleaned.length < 10) {
+                    Log.w(TAG, "Short response too brief, might be incomplete")
+                }
+            }
+            ResponseStyle.DETAILED -> {
+                // For detailed responses, ensure we have substantial content
+                if (cleaned.split(' ').size < 50) {
+                    Log.w(TAG, "Detailed response seems too brief")
+                }
+            }
+            ResponseStyle.EXPLANATORY -> {
+                // For explanatory responses, ensure we have comprehensive content
+                if (cleaned.split(' ').size < 100) {
+                    Log.w(TAG, "Explanatory response seems too brief")
+                }
+            }
+        }
+
+        return cleaned
     }
 
     override fun getAllSessions(): Flow<List<ChatSession>> {
@@ -133,6 +198,12 @@ class ChatRepositoryImpl @Inject constructor(
                 localDataSource.updateSession(it.copy(lastUpdated = System.currentTimeMillis()))
             }
             Unit
+        }
+    }
+
+    override suspend fun deleteLastAIMessage(sessionId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        safeSuspendCall(TAG) {
+            localDataSource.deleteLastAIMessage(sessionId)
         }
     }
 }
