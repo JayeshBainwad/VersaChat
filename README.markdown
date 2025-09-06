@@ -48,6 +48,16 @@ Built with **Jetpack Compose**, **Material Design 3**, and the latest Android be
 - 📝 Responses with **Markdown formatting**
 - 🎯 Option to choose response style: **Short / Detailed / Explanatory**
 - 🔄 Real-time chat updates
+- 🔄 Regenerate AI responses based on selected response style
+
+---
+
+## 📸 Screenshots
+
+| Chat List Screen (Drawer) | Chat Screen (Short Response) | Chat Screen (Detailed Response) | Chat Screen (Explanatory Response) |
+|------------------------------------|--------------------------------|--------------------------------|------------------------------------|
+| ![Chat List Screen](https://github.com/user-attachments/assets/b130caf5-9002-40cb-ae2b-b79f4b589e54) | ![Short Response](https://github.com/user-attachments/assets/4bf44ac4-49ec-4cbe-a0eb-a658c5182a6c) | ![Detailed Response](https://github.com/user-attachments/assets/eaae2dfb-5ef5-4526-bda9-768ecd5496d2) | ![Explanatory Response](https://github.com/user-attachments/assets/da4a70e8-31e1-4dff-aff8-4f7e9690a4ed) |
+| Displays multiple chat sessions in a clean navigation drawer. | **User Input**: "Write a short poem about a futuristic city." <br> Shows a concise, poetic response with Markdown formatting. | **User Input**: "Explain blockchain in simple terms (Detailed)." <br> Demonstrates a comprehensive response with rich details. | **User Input**: "Describe how machine learning works (Explanatory)." <br> Highlights an in-depth, educational response with clear formatting. |
 
 ---
 
